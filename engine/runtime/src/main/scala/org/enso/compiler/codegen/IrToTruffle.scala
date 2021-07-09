@@ -241,7 +241,8 @@ class IrToTruffle(
                   .get(cons.name)
               case BindingsMap.ResolvedPolyglotSymbol(_, _) =>
                 throw new CompilerError(
-                  "Impossible polyglot symbol, should be caught by MethodDefinitions pass."
+                  "Impossible polyglot symbol, should be caught by " +
+                  "MethodDefinitions pass."
                 )
               case _: BindingsMap.ResolvedMethod =>
                 throw new CompilerError(
