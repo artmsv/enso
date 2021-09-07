@@ -36,7 +36,7 @@ class Passes(
     )
   )
 
-  val functionBodyPasses = new PassGroup(
+  val globalTypingPasses = new PassGroup(
     List(
       MethodDefinitions,
       ModuleThisToHere,
@@ -48,7 +48,12 @@ class Passes(
       NestedPatternMatch,
       IgnoredBindings,
       TypeFunctions,
-      TypeSignatures,
+      TypeSignatures
+    )
+  )
+
+  val functionBodyPasses = new PassGroup(
+    List(
       ExpressionAnnotations,
       AliasAnalysis,
       UppercaseNames,
@@ -87,7 +92,7 @@ class Passes(
     * these dependencies.
     */
   val passOrdering: List[PassGroup] = passes.getOrElse(
-    List(moduleDiscoveryPasses, functionBodyPasses)
+    List(moduleDiscoveryPasses, globalTypingPasses, functionBodyPasses)
   )
 
   /** Configuration for the passes. */
