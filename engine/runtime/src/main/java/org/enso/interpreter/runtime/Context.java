@@ -89,7 +89,7 @@ public class Context {
     this.isInlineCachingDisabled =
         environment.getOptions().get(RuntimeOptions.DISABLE_INLINE_CACHES_KEY);
     this.isIrCachingDisabled = environment.getOptions().get(RuntimeOptions.DISABLE_IR_CACHES_KEY);
-    this.compilerConfig = new CompilerConfig(false, true);
+    this.compilerConfig = new CompilerConfig(true, true);
     this.home = home;
     this.builtins = new Builtins(this);
     this.notificationHandler = notificationHandler;

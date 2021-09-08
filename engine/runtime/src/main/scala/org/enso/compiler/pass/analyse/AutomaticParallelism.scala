@@ -4,12 +4,20 @@ import org.enso.compiler.context.{InlineContext, ModuleContext}
 import org.enso.compiler.core.IR
 import org.enso.compiler.core.IR.Module.Scope.Definition
 import org.enso.compiler.core.IR.Module.Scope.Definition.Method
-import org.enso.compiler.core.IR.{Application, CallArgument, Case, DefinitionArgument, Error, Name, Type}
+import org.enso.compiler.core.IR.{
+  Application,
+  CallArgument,
+  Case,
+  DefinitionArgument,
+  Error,
+  Name,
+  Type
+}
 import org.enso.compiler.exception.CompilerError
 import org.enso.compiler.pass.IRPass
 import org.enso.compiler.pass.analyse.DataflowAnalysis.DependencyInfo
 import org.enso.compiler.pass.desugar.ComplexType
-import org.enso.compiler.pass.resolve.ExpressionAnnotations
+import org.enso.compiler.pass.resolve.{ExpressionAnnotations, MethodCalls}
 
 import scala.annotation.unused
 import scala.collection.mutable
@@ -63,7 +71,20 @@ object AutomaticParallelism extends IRPass {
   override def runModule(
     ir: IR.Module,
     @unused moduleContext: ModuleContext
-  ): IR.Module = ir
+  ): IR.Module = {
+    println ("runnin")
+    ir.bindings.map { bind =>
+      bind.mapExpressions { expr =>
+        expr.transformExpressions {
+          case app: IR.Application.Prefix =>
+            println(
+              s"[${app.showCode()}] is an application of ${app.function.getMetadata(MethodCalls)}"
+            )
+            app
+      }}
+    }
+    ir
+  }
 
   /** Executes the pass on an expression.
     *
@@ -275,9 +296,10 @@ object AutomaticParallelism extends IRPass {
         )
         .newName()
     )
-    @unused val bindings = bindingNames.zip(app.arguments).map { case (bindName, arg) =>
-      makeInlinedBindingFor(bindName, arg, mutData, dataflow)
-    }
+    @unused val bindings =
+      bindingNames.zip(app.arguments).map { case (bindName, arg) =>
+        makeInlinedBindingFor(bindName, arg, mutData, dataflow)
+      }
 
     // Rewrite the application to use the bindings
     val newArgs = app.arguments.zip(bindingNames).map {
@@ -316,7 +338,7 @@ object AutomaticParallelism extends IRPass {
       case cse: IR.Case                         => cse
       case block: IR.Expression.Block           => block
       case binding: IR.Expression.Binding       => binding
-      case a => a
+      case a                                    => a
     }
   }
 

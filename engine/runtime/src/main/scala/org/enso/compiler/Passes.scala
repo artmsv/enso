@@ -68,6 +68,7 @@ class Passes(
       AliasAnalysis,
       TailCall,
       Patterns,
+      MethodCalls,
       AliasAnalysis,
       UndefinedVariables,
       DataflowAnalysis
