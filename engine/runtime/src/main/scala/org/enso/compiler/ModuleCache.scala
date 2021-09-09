@@ -12,7 +12,13 @@ import org.enso.compiler.core.IR
 import org.enso.interpreter.runtime.{Context, Module}
 import org.enso.logger.masking.MaskedPath
 
-import java.io.{ByteArrayOutputStream, IOException, ObjectOutputStream}
+import java.io.{
+  ByteArrayOutputStream,
+  FileInputStream,
+  IOException,
+  ObjectInputStream,
+  ObjectOutputStream
+}
 import java.nio.charset.{Charset, StandardCharsets}
 import java.nio.file._
 import java.util.logging.Level
@@ -209,13 +215,18 @@ class ModuleCache(private val module: Module) {
           Module.CompilationStage.valueOf(meta.compilationStage)
 
         if (sourceDigestValid && blobDigestValid) {
-          Some(
-            ModuleCache.CachedModule(
-              // TODO [AA] This is a dummy as we don't write the cache yet.
-              IR.Module(List(), List(), List(), None),
-              compilationStage
-            )
-          )
+          val fis: FileInputStream   = new FileInputStream(dataPath.getPath)
+          val ois: ObjectInputStream = new ObjectInputStream(fis)
+          ois.readObject() match {
+            case mod: IR.Module =>
+              Some(ModuleCache.CachedModule(mod, compilationStage))
+            case _ =>
+              logger.log(
+                ModuleCache.logLevel,
+                s"Module `${module.getName.toString}` was corrupt on disk."
+              )
+              None
+          }
         } else {
           logger.log(
             ModuleCache.logLevel,
@@ -273,19 +284,21 @@ class ModuleCache(private val module: Module) {
 
     def doDeleteAt(file: TruffleFile): Unit = {
       try {
-        if (file.isWritable) {
-          file.delete()
-          logger.log(
-            ModuleCache.logLevel,
-            s"Invalidated the cache at [${file.toMaskedPath.applyMasking()}]."
-          )
-        } else {
-          logger.log(
-            ModuleCache.logLevel,
-            s"Cannot invalidate the cache at " +
-            s"[${file.toMaskedPath.applyMasking()}]. " +
-            s"Cache location not writable."
-          )
+        if (file.exists()) {
+          if (file.isWritable) {
+            file.delete()
+            logger.log(
+              ModuleCache.logLevel,
+              s"Invalidated the cache at [${file.toMaskedPath.applyMasking()}]."
+            )
+          } else {
+            logger.log(
+              ModuleCache.logLevel,
+              s"Cannot invalidate the cache at " +
+              s"[${file.toMaskedPath.applyMasking()}]. " +
+              s"Cache location not writable."
+            )
+          }
         }
       } catch {
         case _: NoSuchFileException =>

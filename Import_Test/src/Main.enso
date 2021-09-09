@@ -1,0 +1,3 @@
+import project.Foo
+
+main = Foo.do_print

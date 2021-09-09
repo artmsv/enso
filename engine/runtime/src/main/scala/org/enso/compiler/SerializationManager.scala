@@ -94,6 +94,56 @@ class SerializationManager(compiler: Compiler) {
     true
   }
 
+  /** Deserializes the requested module from the cache if possible.
+   *
+   * If the requested module is currently being serialized it will wait for
+   * completion before loading. If the module is queued for serialization it
+   * will evict it and not load from the cache (this is usually indicative of a
+   * programming bug).
+   *
+   * @param module the module to deserialize from the cache.
+   * @return `true` if it was deserialized and loaded into `module`, otherwise
+   *         `false`
+   */
+  def deserialize(module: Module): Boolean = {
+    if (isWaitingForSerialization(module)) {
+      abort(module)
+      false
+    } else {
+      while (isSerializing(module)) {
+        Thread.sleep(100)
+      }
+
+      module.getCache.load(compiler.context) match {
+        case Some(ModuleCache.CachedModule(ir, stage)) =>
+          val relinkedIrChecks =
+            ir.preorder.map(_.passData.restoreFromSerialization(this.compiler))
+
+          if (!relinkedIrChecks.contains(false)) {
+            module.unsafeSetIr(ir)
+            module.unsafeSetCompilationStage(stage)
+            logger.log(
+              debugLogLevel,
+              s"Restored IR from cache for module `${module.getName}` at stage $stage."
+            )
+            true
+          } else {
+            logger.log(
+              debugLogLevel,
+              s"Could not restore the IR for module `${module.getName}`."
+            )
+            false
+          }
+        case None =>
+          logger.log(
+            debugLogLevel,
+            s"Unable to load the cache for module `${module.getName}`."
+          )
+          false
+      }
+    }
+  }
+
   /** Checks if the provided module is in the process of being serialized.
     *
     * @param module the module to check
@@ -155,6 +205,10 @@ class SerializationManager(compiler: Compiler) {
       while (!pool.isTerminated) {
         pool.awaitTermination(500, TimeUnit.MILLISECONDS)
       }
+
+      pool.shutdownNow()
+      Thread.sleep(100)
+      logger.log(debugLogLevel, "Serialization manager has been shut down.")
     }
   }
 

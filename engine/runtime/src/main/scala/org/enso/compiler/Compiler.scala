@@ -1,5 +1,6 @@
 package org.enso.compiler
 
+import com.oracle.truffle.api.TruffleLogger
 import com.oracle.truffle.api.source.Source
 import org.enso.compiler.codegen.{AstToIr, IrToTruffle, RuntimeStubsGenerator}
 import org.enso.compiler.context.{FreshNameSupply, InlineContext, ModuleContext}
@@ -23,6 +24,8 @@ import org.enso.syntax.text.Parser.IDMap
 import org.enso.syntax.text.{AST, Parser}
 
 import java.io.StringReader
+import java.util.logging.Level
+import scala.annotation.unused
 import scala.jdk.OptionConverters._
 
 /** This class encapsulates the static transformation processes that take place
@@ -46,6 +49,7 @@ class Compiler(
   private val irCachingEnabled = !context.isIrCachingDisabled
   private val serializationManager: SerializationManager =
     new SerializationManager(this)
+  private val logger: TruffleLogger = context.getLogger(getClass)
 
   /** Lazy-initializes the IR for the builtins module.
     */
@@ -119,19 +123,27 @@ class Compiler(
           Module.CompilationStage.AFTER_CODEGEN
         )
       ) {
-        truffleCodegen(module.getIr, module.getSource, module.getScope)
-        module.unsafeSetCompilationStage(Module.CompilationStage.AFTER_CODEGEN)
 
-        val shouldStoreCache = irCachingEnabled && !module.wasLoadedFromCache()
-        if (shouldStoreCache && !hasErrors(module) && !module.isInteractive) {
-          serializationManager.serialize(module)
-        }
+        val mainMethod = module.getIr.bindings.head
+          .asInstanceOf[IR.Module.Scope.Definition.Method.Explicit]
+
+        println(mainMethod)
+
+        System.exit(0)
+//        truffleCodegen(module.getIr, module.getSource, module.getScope)
+//        module.unsafeSetCompilationStage(Module.CompilationStage.AFTER_CODEGEN)
+//
+//        val shouldStoreCache = irCachingEnabled && !module.wasLoadedFromCache()
+//        if (shouldStoreCache && !hasErrors(module) && !module.isInteractive) {
+//          serializationManager.serialize(module)
+//        }
       }
     }
   }
 
   /** Runs part of the compiler to generate docs from Enso code.
-    * @param module - the scope from which docs are generated.
+    *
+    * @param module the scope from which docs are generated
     */
   def generateDocs(module: Module): Module = {
     initializeBuiltinsIr()
@@ -146,26 +158,30 @@ class Compiler(
     module.ensureScopeExists()
     module.getScope.reset()
 
-    module.getCache.load(context) match {
-      case Some(ModuleCache.CachedModule(ir, stage)) if irCachingEnabled =>
-        module.unsafeSetIr(ir)
-        module.unsafeSetCompilationStage(stage)
-        throw new CompilerError(
-          "Caching should not yet be enabled in production."
-        )
-      case _ =>
-        val moduleContext = ModuleContext(
-          module           = module,
-          freshNameSupply  = Some(freshNameSupply),
-          compilerConfig   = config,
-          isGeneratingDocs = isGenDocs
-        )
-        val parsedAST        = parse(module.getSource)
-        val expr             = generateIR(parsedAST)
-        val discoveredModule = recognizeBindings(expr, moduleContext)
-        module.unsafeSetIr(discoveredModule)
-        module.unsafeSetCompilationStage(Module.CompilationStage.AFTER_PARSING)
+    if (irCachingEnabled && serializationManager.deserialize(module)) {
+      return
     }
+
+    uncachedParseModule(module, isGenDocs)
+  }
+
+  private def uncachedParseModule(module: Module, isGenDocs: Boolean): Unit = {
+    logger.log(
+      Compiler.defaultLogLevel,
+      s"Loading module `${module.getName}` from source."
+    )
+
+    val moduleContext = ModuleContext(
+      module           = module,
+      freshNameSupply  = Some(freshNameSupply),
+      compilerConfig   = config,
+      isGeneratingDocs = isGenDocs
+    )
+    val parsedAST        = parse(module.getSource)
+    val expr             = generateIR(parsedAST)
+    val discoveredModule = recognizeBindings(expr, moduleContext)
+    module.unsafeSetIr(discoveredModule)
+    module.unsafeSetCompilationStage(Module.CompilationStage.AFTER_PARSING)
   }
 
   /** Gets a module definition by name.
@@ -389,7 +405,7 @@ class Compiler(
       .diagnostics
   }
 
-  private def hasErrors(module: Module): Boolean =
+  @unused private def hasErrors(module: Module): Boolean =
     gatherDiagnostics(module).exists {
       case _: IR.Error => true
       case _           => false
@@ -553,4 +569,9 @@ class Compiler(
   def shutdown(waitForPendingJobCompletion: Boolean): Unit = {
     serializationManager.shutdown(waitForPendingJobCompletion)
   }
+}
+object Compiler {
+
+  /** The default logging level for the compiler. */
+  private val defaultLogLevel: Level = Level.FINE
 }
