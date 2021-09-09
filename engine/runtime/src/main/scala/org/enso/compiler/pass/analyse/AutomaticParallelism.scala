@@ -13,13 +13,19 @@ import org.enso.compiler.core.IR.{
   Name,
   Type
 }
+import org.enso.compiler.data.BindingsMap.{Resolution, ResolvedMethod}
 import org.enso.compiler.exception.CompilerError
 import org.enso.compiler.pass.IRPass
 import org.enso.compiler.pass.analyse.DataflowAnalysis.DependencyInfo
 import org.enso.compiler.pass.desugar.ComplexType
-import org.enso.compiler.pass.resolve.{ExpressionAnnotations, MethodCalls}
+import org.enso.compiler.pass.resolve.{
+  ExpressionAnnotations,
+  MethodCalls,
+  ModuleAnnotations,
+  TypeSignatures
+}
 
-import scala.annotation.unused
+import scala.annotation.{tailrec, unused}
 import scala.collection.mutable
 
 /** This pass is responsible for discovering occurrences of automatically
@@ -72,19 +78,99 @@ object AutomaticParallelism extends IRPass {
     ir: IR.Module,
     @unused moduleContext: ModuleContext
   ): IR.Module = {
-    println ("runnin")
-    ir.bindings.map { bind =>
-      bind.mapExpressions { expr =>
-        expr.transformExpressions {
-          case app: IR.Application.Prefix =>
-            println(
-              s"[${app.showCode()}] is an application of ${app.function.getMetadata(MethodCalls)}"
+    ir.bindings.map {
+      case method: IR.Module.Scope.Definition.Method.Explicit =>
+        getBodyBlock(method.body) match {
+          case Some(block) =>
+            block.expressions.foreach(expr =>
+              println(s"${getParallelismStatus(expr)}:\t${expr.showCode()}")
             )
-            app
-      }}
+            println(
+              s"${getParallelismStatus(block.returnValue)}:\t${block.returnValue.showCode()}"
+            )
+            method
+          case None => method
+        }
+      case other => other
     }
     ir
   }
+
+  sealed private trait ParallelismStatus {
+    def sequencedWith(other: => ParallelismStatus): ParallelismStatus
+  }
+
+  private case object Pure extends ParallelismStatus {
+    override def sequencedWith(other: => ParallelismStatus): ParallelismStatus =
+      other
+  }
+
+  private case object Parallelize extends ParallelismStatus {
+    override def sequencedWith(other: => ParallelismStatus): ParallelismStatus =
+      other match {
+        case Parallelize => Parallelize
+        case Pure        => Parallelize
+        case Pinned      => Pinned
+      }
+  }
+
+  private case object Pinned extends ParallelismStatus {
+    override def sequencedWith(other: => ParallelismStatus): ParallelismStatus =
+      Pinned
+  }
+
+  @tailrec
+  private def getMonad(signature: IR.Expression): Option[String] =
+    signature match {
+      case lam: IR.Function.Lambda => getMonad(lam.body)
+      case app: IR.Application.Operator.Binary =>
+        if (app.operator.name == "in") {
+          app.right.value match {
+            case lit: IR.Name.Literal => Some(lit.name)
+            case _                    => None
+          }
+        } else None
+      case _ => None
+    }
+
+  private def getParallelismStatus(expr: IR.Expression): ParallelismStatus =
+    expr match {
+      case app: IR.Application.Prefix =>
+        app.function.getMetadata(MethodCalls) match {
+          case Some(Resolution(method: ResolvedMethod)) =>
+            val methodIr = method.getIr
+            val isParallelize = methodIr
+              .getMetadata(ModuleAnnotations)
+              .exists(_.annotations.exists(_.name == "@Parallelize"))
+            val monad = methodIr
+              .getMetadata(TypeSignatures)
+              .flatMap(sig => getMonad(sig.signature))
+            val baseStatus: ParallelismStatus =
+              if (isParallelize) Parallelize
+              else if (monad.contains("Pure")) Pure
+              else Pinned
+            app.arguments
+              .map(_.value)
+              .foldLeft(baseStatus)((status, ir) =>
+                status.sequencedWith(getParallelismStatus(ir))
+              )
+          case _ => Pinned
+        }
+      case bind: IR.Expression.Binding => getParallelismStatus(bind.expression)
+      case _: IR.Name                  => Pure
+      case _: IR.Literal               => Pure
+      case _                           => Pinned
+    }
+
+  @tailrec
+  private def getBodyBlock(expr: IR.Expression): Option[IR.Expression.Block] =
+    expr match {
+      case fun: IR.Function.Binding => getBodyBlock(fun.body)
+      case fun: IR.Function.Lambda  => getBodyBlock(fun.body)
+      case block: IR.Expression.Block if block.expressions.nonEmpty =>
+        Some(block)
+      case _ => None
+    }
 
   /** Executes the pass on an expression.
     *

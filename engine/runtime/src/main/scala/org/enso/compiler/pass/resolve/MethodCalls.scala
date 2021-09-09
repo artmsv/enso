@@ -62,12 +62,10 @@ object MethodCalls extends IRPass {
   ): IR.Expression = {
     expr.transformExpressions { case app: IR.Application.Prefix =>
       def fallback = app.mapExpressions(doExpression(bindingsMap, _))
-      println("working on " + app.showCode())
       app.function match {
         case name: IR.Name if name.isMethod =>
           app.arguments match {
             case first :: _ =>
-              println("looks promissing?")
               val targetBindings = first.value match {
                 case _: IR.Name.Here => Some(bindingsMap)
                 case value =>
@@ -86,8 +84,6 @@ object MethodCalls extends IRPass {
                 case Some(bindings) =>
                   val resolution =
                     bindings.exportedSymbols.get(name.name.toLowerCase)
-                  println(bindings.exportedSymbols)
-                  println("resolved: " + resolution)
                   resolution match {
                     case Some(List(resolution)) =>
                       val newName =
