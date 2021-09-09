@@ -158,9 +158,9 @@ class Compiler(
     module.ensureScopeExists()
     module.getScope.reset()
 
-//    if (irCachingEnabled && serializationManager.deserialize(module)) {
-//      return
-//    }
+    if (irCachingEnabled && serializationManager.deserialize(module)) {
+      return
+    }
 
     uncachedParseModule(module, isGenDocs)
   }
