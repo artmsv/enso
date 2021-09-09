@@ -124,19 +124,19 @@ class Compiler(
         )
       ) {
 
-        val mainMethod = module.getIr.bindings.head
-          .asInstanceOf[IR.Module.Scope.Definition.Method.Explicit]
-
-        println(mainMethod)
-
-        System.exit(0)
-//        truffleCodegen(module.getIr, module.getSource, module.getScope)
-//        module.unsafeSetCompilationStage(Module.CompilationStage.AFTER_CODEGEN)
+//        val mainMethod = module.getIr.bindings.head
+//          .asInstanceOf[IR.Module.Scope.Definition.Method.Explicit]
 //
-//        val shouldStoreCache = irCachingEnabled && !module.wasLoadedFromCache()
-//        if (shouldStoreCache && !hasErrors(module) && !module.isInteractive) {
-//          serializationManager.serialize(module)
-//        }
+//        println(mainMethod)
+//
+//        System.exit(0)
+        truffleCodegen(module.getIr, module.getSource, module.getScope)
+        module.unsafeSetCompilationStage(Module.CompilationStage.AFTER_CODEGEN)
+
+        val shouldStoreCache = irCachingEnabled && !module.wasLoadedFromCache()
+        if (shouldStoreCache && !hasErrors(module) && !module.isInteractive) {
+          serializationManager.serialize(module)
+        }
       }
     }
   }

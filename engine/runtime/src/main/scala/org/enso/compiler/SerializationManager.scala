@@ -75,7 +75,7 @@ class SerializationManager(compiler: Compiler) {
       debugLogLevel,
       s"Requesting serialization for module [${module.getName}]."
     )
-    val duplicatedIr = module.getIr.duplicate()
+    val duplicatedIr = module.getIr.duplicate(keepIdentifiers = true)
     duplicatedIr.preorder.foreach(_.passData.prepareForSerialization(compiler))
 
     val task = doSerialize(
