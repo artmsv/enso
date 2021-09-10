@@ -10,11 +10,7 @@ import org.enso.compiler.data.CompilerConfig
 import org.enso.compiler.exception.{CompilationAbortedException, CompilerError}
 import org.enso.compiler.pass.PassManager
 import org.enso.compiler.pass.analyse._
-import org.enso.compiler.phase.{
-  ExportCycleException,
-  ExportsResolution,
-  ImportResolver
-}
+import org.enso.compiler.phase.{ExportCycleException, ExportsResolution, ImportResolver}
 import org.enso.interpreter.node.{ExpressionNode => RuntimeExpression}
 import org.enso.interpreter.runtime.builtin.Builtins
 import org.enso.interpreter.runtime.scope.{LocalScope, ModuleScope}
@@ -124,12 +120,6 @@ class Compiler(
         )
       ) {
 
-//        val mainMethod = module.getIr.bindings.head
-//          .asInstanceOf[IR.Module.Scope.Definition.Method.Explicit]
-//
-//        println(mainMethod)
-//
-//        System.exit(0)
         truffleCodegen(module.getIr, module.getSource, module.getScope)
         module.unsafeSetCompilationStage(Module.CompilationStage.AFTER_CODEGEN)
 
@@ -158,9 +148,15 @@ class Compiler(
     module.ensureScopeExists()
     module.getScope.reset()
 
-    if (irCachingEnabled && serializationManager.deserialize(module)) {
-      return
-    }
+//    if (irCachingEnabled && serializationManager.deserialize(module)) {
+//      if (module.getName.toString == "local.Import_Test.Foo") {
+//        val do_print = module.getIr.bindings.head.asInstanceOf[Method.Explicit]
+//        val meta = do_print.passData
+//        println(meta)
+//      }
+//
+//      return
+//    }
 
     uncachedParseModule(module, isGenDocs)
   }

@@ -2049,7 +2049,7 @@ object IR {
       override def children: List[IR] = List()
 
       /** @inheritdoc */
-      override def showCode(indent: Int): String = text
+      override def showCode(indent: Int): String = s"\"$text\""
     }
   }
 

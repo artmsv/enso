@@ -1,11 +1,18 @@
 package org.enso.compiler
 
 import com.oracle.truffle.api.TruffleLogger
+import org.apache.commons.io.output.ByteArrayOutputStream
 import org.enso.compiler.core.IR
+import org.enso.compiler.core.IR.Module.Scope.Definition.Method
 import org.enso.interpreter.runtime.Module
 import org.enso.pkg.QualifiedName
 
-import java.io.NotSerializableException
+import java.io.{
+  ByteArrayInputStream,
+  NotSerializableException,
+  ObjectInputStream,
+  ObjectOutputStream
+}
 import java.util.concurrent.{
   ConcurrentHashMap,
   LinkedBlockingDeque,
@@ -78,6 +85,46 @@ class SerializationManager(compiler: Compiler) {
     val duplicatedIr = module.getIr.duplicate(keepIdentifiers = true)
     duplicatedIr.preorder.foreach(_.passData.prepareForSerialization(compiler))
 
+    if (module.getName.toString == "local.Import_Test.Foo") {
+      println("DEBUG =========================================================")
+      println(
+        s"Known modules: ${compiler.context.getPackageRepository.getModuleMap.keys}"
+      )
+
+      val baos = new ByteArrayOutputStream()
+      val oos  = new ObjectOutputStream(baos)
+      oos.writeObject(duplicatedIr)
+      val bytes = baos.toByteArray
+      val bais  = new ByteArrayInputStream(bytes)
+      val ois   = new ObjectInputStream(bais)
+
+      val readBack = ois.readObject().asInstanceOf[IR.Module]
+      val results =
+        readBack.preorder.map(_.passData.restoreFromSerialization(compiler))
+
+      println(readBack.showCode())
+      println(module.getIr.showCode())
+
+      println(s"Results = $results")
+      println(s"Does it work? ${module.getIr == readBack}")
+
+      val do_print = readBack.bindings.head
+        .asInstanceOf[Method.Explicit]
+        .passData
+        .metadata
+        .keys
+
+      println(s"After links restoration: $do_print")
+
+      // TODO [AA] When are the `Module`s available from in the package registry?
+      // TODO [AA] It seems to be failing inside the restoration of links
+      //  process. I must have buggy error handling as it's not reporting it.
+      // TODO [AA] Modules should be registered from the get go, even if they've
+      //  not had anything done to them.
+
+      println("DEBUG =========================================================")
+    }
+
     val task = doSerialize(
       module.getCache,
       duplicatedIr,
@@ -95,16 +142,16 @@ class SerializationManager(compiler: Compiler) {
   }
 
   /** Deserializes the requested module from the cache if possible.
-   *
-   * If the requested module is currently being serialized it will wait for
-   * completion before loading. If the module is queued for serialization it
-   * will evict it and not load from the cache (this is usually indicative of a
-   * programming bug).
-   *
-   * @param module the module to deserialize from the cache.
-   * @return `true` if it was deserialized and loaded into `module`, otherwise
-   *         `false`
-   */
+    *
+    * If the requested module is currently being serialized it will wait for
+    * completion before loading. If the module is queued for serialization it
+    * will evict it and not load from the cache (this is usually indicative of a
+    * programming bug).
+    *
+    * @param module the module to deserialize from the cache.
+    * @return `true` if it was deserialized and loaded into `module`, otherwise
+    *         `false`
+    */
   def deserialize(module: Module): Boolean = {
     if (isWaitingForSerialization(module)) {
       abort(module)
